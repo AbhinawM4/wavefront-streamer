@@ -17,6 +17,7 @@ let currentFfmpeg = null;
 let activeStationUrl = '';
 let activeStationName = '';
 let checkInterval = null;
+let isIntentionalShutdown = false;
 
 async function checkStreamConfig() {
   try {
@@ -118,6 +119,12 @@ function startFfmpeg() {
     console.log(`\n[FFmpeg] Process closed with exit code ${code}`);
     currentFfmpeg = null;
     
+    if (isIntentionalShutdown) {
+      console.log('Intentional shutdown completed. Resetting state.');
+      isIntentionalShutdown = false;
+      return;
+    }
+    
     // If it crashed unexpectedly but we are still in streaming status, auto-restart
     if (code !== 0 && activeStationUrl) {
       console.log('Re-establishing connection pipeline in 5 seconds...');
@@ -129,6 +136,7 @@ function startFfmpeg() {
 function stopFfmpeg() {
   if (currentFfmpeg) {
     console.log('Terminating active FFmpeg process...');
+    isIntentionalShutdown = true;
     try {
       currentFfmpeg.kill('SIGKILL');
     } catch (e) {}
