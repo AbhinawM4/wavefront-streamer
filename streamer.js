@@ -74,10 +74,13 @@ function startFfmpeg() {
   
   // FFmpeg dynamic visualizer: Bouncing oscilloscope showwaves filter complex in Wavefront Teal (#0A7C6E)
   // Maps visual waves to the live audio stream, overlays standard monospace terminal font and streams to RTMP.
+  // Chained filter complex: audio is visualised to waves, and then drawtext is overlaid on the wave video stream.
+  const filterGraph = '[0:a]showwaves=s=1280x720:mode=line:colors=0x0A7C6E[waves];[waves]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=24:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
+
   const args = [
     '-re', // Read input in real time
     '-i', activeStationUrl, // Input live radio audio stream
-    '-filter_complex', '[0:a]showwaves=s=1280x720:mode=line:colors=0x0A7C6E[v]',
+    '-filter_complex', filterGraph,
     '-map', '[v]',
     '-map', '0:a',
     '-c:v', 'libx264',
@@ -87,7 +90,6 @@ function startFfmpeg() {
     '-bufsize', '3000k',
     '-pix_fmt', 'yuv420p',
     '-g', '50',
-    '-vf', 'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=24:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80',
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
