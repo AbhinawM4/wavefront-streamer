@@ -78,14 +78,11 @@ function startFfmpeg() {
   const hasLoopVideo = fs.existsSync('loop.mp4');
 
   if (hasLoopVideo) {
-    console.log('Detected custom loop video background (loop.mp4). Activating layer composition...');
+    console.log('Detected custom loop video background (loop.mp4). Overlaying station info...');
     
     // Wavefront custom visualizer layer complex with loop.mp4 backdrop:
-    // 1. Convert audio stream [0:a] into line waves [waves_raw]
-    // 2. Filter out pure black color key to make waves transparent [waves_trans]
-    // 3. Overlay transparent waves onto looping background video [1:v] -> [bg_waves]
-    // 4. Overlay telemetry HUD text on top of the compilation
-    const filterGraph = '[0:a]showwaves=s=1280x720:mode=line:colors=0x0A7C6E[waves_raw];[waves_raw]colorkey=0x000000:0.1:0.1[waves_trans];[1:v][waves_trans]overlay=shortest=0[bg_waves];[bg_waves]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=24:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
+    // Takes the looping video stream [1:v] and draws the monospace text overlay directly on top.
+    const filterGraph = '[1:v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=24:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
 
     args = [
       '-re',                   // Read input in real time
