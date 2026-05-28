@@ -17,7 +17,6 @@ let currentFfmpeg = null;
 let activeStationUrl = '';
 let activeStationName = '';
 let checkInterval = null;
-let isIntentionalShutdown = false;
 
 async function checkStreamConfig() {
   try {
@@ -99,13 +98,14 @@ function startFfmpeg() {
   ];
 
   console.log(`Piping stream to YouTube Live RTMP...`);
-  currentFfmpeg = spawn('ffmpeg', args);
+  const ffmpegProcess = spawn('ffmpeg', args);
+  currentFfmpeg = ffmpegProcess;
 
-  currentFfmpeg.stdout.on('data', (data) => {
+  ffmpegProcess.stdout.on('data', (data) => {
     console.log(`[FFmpeg STDOUT] ${data}`);
   });
 
-  currentFfmpeg.stderr.on('data', (data) => {
+  ffmpegProcess.stderr.on('data', (data) => {
     // FFmpeg logs stats to stderr
     const log = data.toString();
     if (log.includes('frame=') || log.includes('speed=')) {
@@ -115,13 +115,16 @@ function startFfmpeg() {
     }
   });
 
-  currentFfmpeg.on('close', (code) => {
+  ffmpegProcess.on('close', (code) => {
     console.log(`\n[FFmpeg] Process closed with exit code ${code}`);
-    currentFfmpeg = null;
     
-    if (isIntentionalShutdown) {
+    // Only set currentFfmpeg to null if it's still pointing to the process that just closed
+    if (currentFfmpeg === ffmpegProcess) {
+      currentFfmpeg = null;
+    }
+    
+    if (ffmpegProcess.isIntentional) {
       console.log('Intentional shutdown completed. Resetting state.');
-      isIntentionalShutdown = false;
       return;
     }
     
@@ -136,7 +139,7 @@ function startFfmpeg() {
 function stopFfmpeg() {
   if (currentFfmpeg) {
     console.log('Terminating active FFmpeg process...');
-    isIntentionalShutdown = true;
+    currentFfmpeg.isIntentional = true;
     try {
       currentFfmpeg.kill('SIGKILL');
     } catch (e) {}
