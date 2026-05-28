@@ -1,0 +1,12 @@
+{
+  "name": "wavefront-streamer",
+  "version": "1.0.0",
+  "description": "Autonomous cloud streamer for Wavefront Live Radio",
+  "main": "streamer.js",
+  "scripts": {
+    "start": "node streamer.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.8"
+  }
+}

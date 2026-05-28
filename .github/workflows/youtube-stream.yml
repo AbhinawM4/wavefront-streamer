@@ -1,0 +1,35 @@
+name: 24/7 Autonomous YouTube Stream
+on:
+  workflow_dispatch: # Allows manual trigger from Admin Dashboard API
+    inputs:
+      stream_key:
+        description: 'YouTube Stream Key'
+        required: true
+        type: string
+
+jobs:
+  stream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg & Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Project Dependencies
+        run: npm install
+
+      - name: Run Cyberpunk Stream Encoder
+        env:
+          SUPABASE_URL: 'https://kbbvgdmktwumuiqibpgf.supabase.co'
+          SUPABASE_ANON_KEY: 'sb_publishable_pc0U_EEZ3v1UadQkoAIx6w_SJtxz3o4'
+          YOUTUBE_STREAM_KEY: ${{ github.event.inputs.stream_key }}
+        run: node streamer.js
