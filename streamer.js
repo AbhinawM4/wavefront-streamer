@@ -211,6 +211,30 @@ realtimeChannel = supabase
 checkInterval = setInterval(checkStreamConfig, 30000);
 checkStreamConfig();
 
+// 3. Autonomous Shutdown Sequence (Exits cleanly after 5.5 hours to prevent exceeding limits)
+const SHUTDOWN_TIMEOUT_MS = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes
+console.log(`⏰ [TIMER] Autonomous shutdown sequence scheduled in 5.5 hours (${5.5 * 60} minutes)`);
+setTimeout(async () => {
+  console.log('\n🚨 [AUTO-SHUTDOWN] 5.5 hours limit reached. Initiating clean termination...');
+  try {
+    const { error } = await supabase
+      .from('stream_config')
+      .update({
+        status: 'offline',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', 1);
+    
+    if (error) throw error;
+    console.log('[AUTO-SHUTDOWN] Supabase status set to offline.');
+  } catch (err) {
+    console.error('[AUTO-SHUTDOWN] Failed to update DB state:', err.message || err);
+  }
+  
+  stopFfmpeg();
+  cleanupAndExit();
+}, SHUTDOWN_TIMEOUT_MS);
+
 console.log('-------------------------------------------');
 console.log('🛰️  Wavefront Autonomous Broadcast Node Active');
 console.log('-------------------------------------------');
