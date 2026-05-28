@@ -74,30 +74,64 @@ function startFfmpeg() {
 
   console.log('Initializing FFmpeg encoder pipeline...');
   
-  // FFmpeg dynamic visualizer: Bouncing oscilloscope showwaves filter complex in Wavefront Teal (#0A7C6E)
-  // Maps visual waves to the live audio stream, overlays standard monospace terminal font and streams to RTMP.
-  // Chained filter complex: audio is visualised to waves, and then drawtext is overlaid on the wave video stream.
-  const filterGraph = '[0:a]showwaves=s=1280x720:mode=line:colors=0x0A7C6E[waves];[waves]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=24:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
+  let args = [];
+  const hasLoopVideo = fs.existsSync('loop.mp4');
 
-  const args = [
-    '-re', // Read input in real time
-    '-i', activeStationUrl, // Input live radio audio stream
-    '-filter_complex', filterGraph,
-    '-map', '[v]',
-    '-map', '0:a',
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-b:v', '1500k',
-    '-maxrate', '1500k',
-    '-bufsize', '3000k',
-    '-pix_fmt', 'yuv420p',
-    '-g', '50',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-ar', '44100',
-    '-f', 'flv',
-    `rtmp://a.rtmp.youtube.com/live2/${streamKey}`
-  ];
+  if (hasLoopVideo) {
+    console.log('Detected custom loop video background (loop.mp4). Activating layer composition...');
+    
+    // Wavefront custom visualizer layer complex with loop.mp4 backdrop:
+    // 1. Convert audio stream [0:a] into line waves [waves_raw]
+    // 2. Filter out pure black color key to make waves transparent [waves_trans]
+    // 3. Overlay transparent waves onto looping background video [1:v] -> [bg_waves]
+    // 4. Overlay telemetry HUD text on top of the compilation
+    const filterGraph = '[0:a]showwaves=s=1280x720:mode=line:colors=0x0A7C6E[waves_raw];[waves_raw]colorkey=0x000000:0.1:0.1[waves_trans];[1:v][waves_trans]overlay=shortest=0[bg_waves];[bg_waves]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=24:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
+
+    args = [
+      '-re',                   // Read input in real time
+      '-i', activeStationUrl,  // [Input 0] Live radio audio stream
+      '-stream_loop', '-1',    // Loop the MP4 video infinitely
+      '-i', 'loop.mp4',        // [Input 1] Looping background MP4 video
+      '-filter_complex', filterGraph,
+      '-map', '[v]',           // Map composed video track
+      '-map', '0:a',           // Map original radio audio track
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-b:v', '1500k',
+      '-maxrate', '1500k',
+      '-bufsize', '3000k',
+      '-pix_fmt', 'yuv420p',
+      '-g', '50',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-ar', '44100',
+      '-f', 'flv',
+      `rtmp://a.rtmp.youtube.com/live2/${streamKey}`
+    ];
+  } else {
+    console.log('No loop.mp4 found in local sector directory. Defaulting to classic black background oscilloscope...');
+    const filterGraph = '[0:a]showwaves=s=1280x720:mode=line:colors=0x0A7C6E[waves];[waves]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=24:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
+
+    args = [
+      '-re',                   // Read input in real time
+      '-i', activeStationUrl,  // Input live radio audio stream
+      '-filter_complex', filterGraph,
+      '-map', '[v]',
+      '-map', '0:a',
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-b:v', '1500k',
+      '-maxrate', '1500k',
+      '-bufsize', '3000k',
+      '-pix_fmt', 'yuv420p',
+      '-g', '50',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-ar', '44100',
+      '-f', 'flv',
+      `rtmp://a.rtmp.youtube.com/live2/${streamKey}`
+    ];
+  }
 
   console.log(`Piping stream to YouTube Live RTMP...`);
   const ffmpegProcess = spawn('ffmpeg', args);
