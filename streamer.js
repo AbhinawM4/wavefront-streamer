@@ -17,6 +17,33 @@ let currentFfmpeg = null;
 let activeStationUrl = '';
 let activeStationName = '';
 let checkInterval = null;
+let realtimeChannel = null;
+
+function handleConfigChange(data) {
+  if (!data) return;
+
+  if (data.status !== 'streaming') {
+    console.log('Stream status set to OFFLINE. Initiating graceful shutdown.');
+    stopFfmpeg();
+    cleanupAndExit();
+    return;
+  }
+
+  // Check if station changed or first start
+  if (data.current_station_url !== activeStationUrl || data.current_station_name !== activeStationName) {
+    console.log(`\n[SIGNAL SURF] Active Station Changed: "${data.current_station_name}"`);
+    console.log(`[URL] ${data.current_station_url}`);
+    
+    activeStationUrl = data.current_station_url;
+    activeStationName = data.current_station_name;
+
+    // Write station info to local text file (FFmpeg drawtext reads this live)
+    fs.writeFileSync('song_title.txt', `WAVEFRONT INTERCEPT LOG // CURRENT SIGNAL: ${activeStationName.toUpperCase()}`);
+
+    // Restart FFmpeg stream with new station URL
+    startFfmpeg();
+  }
+}
 
 async function checkStreamConfig() {
   try {
@@ -31,32 +58,7 @@ async function checkStreamConfig() {
       return;
     }
 
-    if (!data) {
-      console.error('No stream config row found.');
-      return;
-    }
-
-    if (data.status !== 'streaming') {
-      console.log('Stream status set to OFFLINE. Initiating graceful shutdown.');
-      stopFfmpeg();
-      cleanupAndExit();
-      return;
-    }
-
-    // Check if station changed or first start
-    if (data.current_station_url !== activeStationUrl || data.current_station_name !== activeStationName) {
-      console.log(`\n[SIGNAL SURF] Active Station Changed: "${data.current_station_name}"`);
-      console.log(`[URL] ${data.current_station_url}`);
-      
-      activeStationUrl = data.current_station_url;
-      activeStationName = data.current_station_name;
-
-      // Write station info to local text file (FFmpeg drawtext reads this live)
-      fs.writeFileSync('song_title.txt', `WAVEFRONT INTERCEPT LOG // CURRENT SIGNAL: ${activeStationName.toUpperCase()}`);
-
-      // Restart FFmpeg stream with new station URL
-      startFfmpeg();
-    }
+    handleConfigChange(data);
   } catch (err) {
     console.error('Error in config check loop:', err);
   }
@@ -152,11 +154,30 @@ function cleanupAndExit() {
   if (checkInterval) {
     clearInterval(checkInterval);
   }
+  if (realtimeChannel) {
+    console.log('Unsubscribing from Supabase Realtime channel...');
+    realtimeChannel.unsubscribe();
+  }
   process.exit(0);
 }
 
-// Start polling Supabase database table every 10 seconds
-checkInterval = setInterval(checkStreamConfig, 10000);
+// 1. Subscribe to Supabase Realtime changes for INSTANT signal surfing
+realtimeChannel = supabase
+  .channel('public:stream_config')
+  .on(
+    'postgres_changes',
+    { event: 'UPDATE', schema: 'public', table: 'stream_config', filter: 'id=eq.1' },
+    (payload) => {
+      console.log('\n⚡ [REALTIME UPLINK] Station update received instantly!');
+      handleConfigChange(payload.new);
+    }
+  )
+  .subscribe((status) => {
+    console.log(`📡 [REALTIME] WebSocket connection status: ${status}`);
+  });
+
+// 2. Start polling Supabase database table every 30 seconds as a fail-safe fallback
+checkInterval = setInterval(checkStreamConfig, 30000);
 checkStreamConfig();
 
 console.log('-------------------------------------------');
