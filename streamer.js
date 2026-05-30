@@ -100,7 +100,8 @@ function startFfmpeg() {
     return;
   }
 
-  const playlistContent = files.map(f => `file '${playlistDir}/${f}'`).join('\n');
+  const baseContent = files.map(f => `file '${playlistDir}/${f}'`).join('\n');
+  const playlistContent = Array(10).fill(baseContent).join('\n');
   fs.writeFileSync('playlist.txt', playlistContent);
   console.log(`Playlist generated with ${files.length} tracks.`);
 
@@ -119,7 +120,6 @@ function startFfmpeg() {
       '-re',                   
       '-f', 'concat',          // Force concat format
       '-safe', '0',            // Allow unsafe file paths in concat
-      '-stream_loop', '-1',    // Loop the audio playlist infinitely
       '-i', 'playlist.txt',    // [Input 0] Generated text file of audio tracks
       '-stream_loop', '-1',    // Loop the MP4 video infinitely
       '-i', backgroundFile,    // [Input 1] Looping background MP4 video
@@ -147,7 +147,6 @@ function startFfmpeg() {
       '-re',                   
       '-f', 'concat',          
       '-safe', '0',            
-      '-stream_loop', '-1',    
       '-i', 'playlist.txt',    
       '-filter_complex', filterGraph,
       '-map', '[v]',
