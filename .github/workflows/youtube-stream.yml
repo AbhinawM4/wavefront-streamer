@@ -1,23 +1,32 @@
 name: 24/7 Autonomous YouTube Stream
 on:
-  workflow_dispatch: # Allows manual trigger from Admin Dashboard API
+  workflow_dispatch:
     inputs:
       stream_key:
         description: 'YouTube Stream Key'
         required: true
         type: string
+      github_pat:
+        description: 'GitHub Personal Access Token'
+        required: false
+        type: string
 
 jobs:
   stream:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Install FFmpeg & Fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu
+          ffmpeg -version | head -1
+          echo "FFmpeg installed successfully"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -25,11 +34,25 @@ jobs:
           node-version: 18
 
       - name: Install Project Dependencies
-        run: npm install
+        run: |
+          npm install
+          echo "Dependencies installed successfully"
+          ls -la node_modules/@supabase/supabase-js/ || echo "supabase-js NOT FOUND"
+
+      - name: Verify Audio & Video Files
+        run: |
+          echo "=== Playlist Files ==="
+          ls -la playlists/lofi/ | head -10
+          echo "=== Video Files ==="
+          ls -la *.mp4
+          echo "=== Font Files ==="
+          ls -la /usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf
+          echo "All assets verified."
 
       - name: Run Cyberpunk Stream Encoder
         env:
           SUPABASE_URL: 'https://kbbvgdmktwumuiqibpgf.supabase.co'
           SUPABASE_ANON_KEY: 'sb_publishable_pc0U_EEZ3v1UadQkoAIx6w_SJtxz3o4'
           YOUTUBE_STREAM_KEY: ${{ github.event.inputs.stream_key }}
+          GITHUB_PAT: ${{ github.event.inputs.github_pat }}
         run: node streamer.js

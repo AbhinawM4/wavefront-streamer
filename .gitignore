@@ -1,0 +1,12 @@
+.DS_Store
+*.flv
+*.mp4
+test-*.js
+fix-*.js
+streamer-patch.js
+insert-jazz.js
+playlist.txt
+song_title.txt
+test_output.mp4
+!loop.mp4
+!loop2.mp4

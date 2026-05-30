@@ -175,13 +175,9 @@ function startFfmpeg() {
   });
 
   ffmpegProcess.stderr.on('data', (data) => {
-    // FFmpeg logs stats to stderr
     const log = data.toString();
-    if (log.includes('frame=') || log.includes('speed=')) {
-      process.stdout.write(`\r${log.trim().slice(0, 100)}`);
-    } else if (log.includes('Error') || log.includes('warning') || log.includes('failed')) {
-      console.log(`\n[FFmpeg LOG] ${log.trim()}`);
-    }
+    // Log ALL FFmpeg output for debugging
+    console.log(`[FFmpeg] ${log.trim()}`);
   });
 
   ffmpegProcess.on('close', (code) => {
@@ -269,18 +265,39 @@ console.log(`⏰ [TIMER] Autonomous shutdown sequence scheduled in 5.5 hours (${
 setTimeout(async () => {
   console.log('\n🚨 [AUTO-SHUTDOWN] 5.5 hours limit reached. Initiating clean termination...');
   try {
-    const { error } = await supabase
+    const { data: currentConfig } = await supabase
       .from('stream_config')
-      .update({
-        status: 'offline',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', 1);
-    
-    if (error) throw error;
-    console.log('[AUTO-SHUTDOWN] Supabase status set to offline.');
+      .select('status')
+      .eq('id', 1)
+      .single();
+
+    if (currentConfig && currentConfig.status === 'streaming') {
+      console.log('[DAISY-CHAIN] Status is still streaming. Passing the baton to a new cloud runner...');
+      const triggerUrl = `https://api.github.com/repos/AbhinawM4/wavefront-streamer/actions/workflows/youtube-stream.yml/dispatches`;
+      const response = await fetch(triggerUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'Authorization': `Bearer ${process.env.GITHUB_PAT}`
+        },
+        body: JSON.stringify({
+          ref: 'main',
+          inputs: { 
+            stream_key: process.env.YOUTUBE_STREAM_KEY,
+            github_pat: process.env.GITHUB_PAT
+          }
+        })
+      });
+      if (!response.ok) {
+        console.error('[DAISY-CHAIN] Failed to trigger next runner:', response.status, await response.text());
+      } else {
+        console.log('[DAISY-CHAIN] Successfully triggered the next runner!');
+      }
+    } else {
+      console.log('[AUTO-SHUTDOWN] Stream is offline. Shutting down completely.');
+    }
   } catch (err) {
-    console.error('[AUTO-SHUTDOWN] Failed to update DB state:', err.message || err);
+    console.error('[AUTO-SHUTDOWN] Error during shutdown/daisy-chain:', err.message || err);
   }
   
   stopFfmpeg();
