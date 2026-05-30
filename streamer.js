@@ -14,8 +14,8 @@ if (!streamKey) {
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 let currentFfmpeg = null;
-let activeStationUrl = '';
-let activeStationName = '';
+let activePlaylist = '';
+let activeBackground = '';
 let checkInterval = null;
 let realtimeChannel = null;
 
@@ -29,18 +29,17 @@ function handleConfigChange(data) {
     return;
   }
 
-  // Check if station changed or first start
-  if (data.current_station_url !== activeStationUrl || data.current_station_name !== activeStationName) {
-    console.log(`\n[SIGNAL SURF] Active Station Changed: "${data.current_station_name}"`);
-    console.log(`[URL] ${data.current_station_url}`);
+  // Check if configuration changed or first start
+  if (data.active_playlist !== activePlaylist || data.active_background !== activeBackground) {
+    console.log(`\n[CONTENT UPDATE] Active Playlist: "${data.active_playlist}" | Background: "${data.active_background}"`);
     
-    activeStationUrl = data.current_station_url;
-    activeStationName = data.current_station_name;
+    activePlaylist = data.active_playlist;
+    activeBackground = data.active_background;
 
-    // Write station info to local text file (FFmpeg drawtext reads this live)
-    fs.writeFileSync('song_title.txt', `WAVEFRONT INTERCEPT LOG // CURRENT SIGNAL: ${activeStationName.toUpperCase()}`);
+    // Write title log
+    fs.writeFileSync('song_title.txt', `WAVEFRONT INTERCEPT LOG // CURRENT PLAYLIST: ${activePlaylist.toUpperCase()}`);
 
-    // Restart FFmpeg stream with new station URL
+    // Restart FFmpeg stream with new content
     startFfmpeg();
   }
 }
@@ -67,31 +66,50 @@ async function checkStreamConfig() {
 function startFfmpeg() {
   stopFfmpeg();
 
-  if (!activeStationUrl) {
-    console.log('No active station URL defined. Awaiting input...');
+  if (!activePlaylist) {
+    console.log('No active playlist defined. Awaiting input...');
     return;
   }
+
+  console.log('Generating dynamic playlist.txt for FFmpeg...');
+  const playlistDir = `playlists/${activePlaylist}`;
+  if (!fs.existsSync(playlistDir)) {
+    console.error(`Playlist directory not found: ${playlistDir}`);
+    return;
+  }
+
+  const files = fs.readdirSync(playlistDir).filter(f => f.endsWith('.mp3') || f.endsWith('.wav'));
+  if (files.length === 0) {
+    console.error(`No audio files found in: ${playlistDir}`);
+    return;
+  }
+
+  const playlistContent = files.map(f => `file '${playlistDir}/${f}'`).join('\n');
+  fs.writeFileSync('playlist.txt', playlistContent);
+  console.log(`Playlist generated with ${files.length} tracks.`);
 
   console.log('Initializing FFmpeg encoder pipeline...');
   
   let args = [];
-  const hasLoopVideo = fs.existsSync('loop.mp4');
+  const backgroundFile = activeBackground || 'loop.mp4';
+  const hasLoopVideo = fs.existsSync(backgroundFile);
 
   if (hasLoopVideo) {
-    console.log('Detected custom loop video background (loop.mp4). Overlaying station info...');
+    console.log(`Detected custom loop video background (${backgroundFile}). Overlaying info...`);
     
-    // Wavefront custom visualizer layer complex with loop.mp4 backdrop:
-    // Takes the looping video stream [1:v] and draws the monospace text overlay directly on top.
     const filterGraph = '[1:v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=16:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
 
     args = [
-      '-re',                   // Read input in real time
-      '-i', activeStationUrl,  // [Input 0] Live radio audio stream
+      '-re',                   
+      '-f', 'concat',          // Force concat format
+      '-safe', '0',            // Allow unsafe file paths in concat
+      '-stream_loop', '-1',    // Loop the audio playlist infinitely
+      '-i', 'playlist.txt',    // [Input 0] Generated text file of audio tracks
       '-stream_loop', '-1',    // Loop the MP4 video infinitely
-      '-i', 'loop.mp4',        // [Input 1] Looping background MP4 video
+      '-i', backgroundFile,    // [Input 1] Looping background MP4 video
       '-filter_complex', filterGraph,
-      '-map', '[v]',           // Map composed video track
-      '-map', '0:a',           // Map original radio audio track
+      '-map', '[v]',           
+      '-map', '0:a',           
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-b:v', '4000k',
@@ -106,12 +124,15 @@ function startFfmpeg() {
       `rtmp://a.rtmp.youtube.com/live2/${streamKey}`
     ];
   } else {
-    console.log('No loop.mp4 found in local sector directory. Defaulting to classic black background oscilloscope...');
+    console.log(`No ${backgroundFile} found. Defaulting to classic black background oscilloscope...`);
     const filterGraph = '[0:a]showwaves=s=1280x720:mode=line:colors=0x0A7C6E[waves];[waves]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf:textfile=song_title.txt:reload=1:fontcolor=0x0A7C6E:fontsize=16:box=1:boxcolor=0x000000BC:boxborderw=10:x=(w-text_w)/2:y=h-80[v]';
 
     args = [
-      '-re',                   // Read input in real time
-      '-i', activeStationUrl,  // Input live radio audio stream
+      '-re',                   
+      '-f', 'concat',          
+      '-safe', '0',            
+      '-stream_loop', '-1',    
+      '-i', 'playlist.txt',    
       '-filter_complex', filterGraph,
       '-map', '[v]',
       '-map', '0:a',
@@ -162,7 +183,7 @@ function startFfmpeg() {
     }
     
     // If it crashed unexpectedly but we are still in streaming status, auto-restart
-    if (code !== 0 && activeStationUrl) {
+    if (code !== 0 && activePlaylist) {
       console.log('Re-establishing connection pipeline in 5 seconds...');
       setTimeout(startFfmpeg, 5000);
     }
