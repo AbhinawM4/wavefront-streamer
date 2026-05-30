@@ -13,6 +13,22 @@ if (!streamKey) {
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+process.on('uncaughtException', async (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+  try {
+    await supabase.from('stream_config').update({ current_station_name: 'CRASH: ' + err.message }).eq('id', 1);
+  } catch(e) {}
+  process.exit(1);
+});
+process.on('unhandledRejection', async (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  try {
+    await supabase.from('stream_config').update({ current_station_name: 'REJECT: ' + reason }).eq('id', 1);
+  } catch(e) {}
+  process.exit(1);
+});
+
+
 let currentFfmpeg = null;
 let activePlaylist = '';
 let activeBackground = '';
@@ -185,6 +201,7 @@ function startFfmpeg() {
     // If it crashed unexpectedly but we are still in streaming status, auto-restart
     if (code !== 0 && activePlaylist) {
       console.log('Re-establishing connection pipeline in 5 seconds...');
+      supabase.from('stream_config').update({ current_station_name: 'FFMPEG CRASH CODE: ' + code }).eq('id', 1).then();
       setTimeout(startFfmpeg, 5000);
     }
   });
