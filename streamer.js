@@ -94,9 +94,9 @@ function startFfmpeg() {
       '-map', '0:a',           // Map original radio audio track
       '-c:v', 'libx264',
       '-preset', 'veryfast',
-      '-b:v', '1500k',
-      '-maxrate', '1500k',
-      '-bufsize', '3000k',
+      '-b:v', '4000k',
+      '-maxrate', '4000k',
+      '-bufsize', '8000k',
       '-pix_fmt', 'yuv420p',
       '-g', '50',
       '-c:a', 'aac',
@@ -117,9 +117,9 @@ function startFfmpeg() {
       '-map', '0:a',
       '-c:v', 'libx264',
       '-preset', 'veryfast',
-      '-b:v', '1500k',
-      '-maxrate', '1500k',
-      '-bufsize', '3000k',
+      '-b:v', '4000k',
+      '-maxrate', '4000k',
+      '-bufsize', '8000k',
       '-pix_fmt', 'yuv420p',
       '-g', '50',
       '-c:a', 'aac',
@@ -207,9 +207,24 @@ realtimeChannel = supabase
     console.log(`📡 [REALTIME] WebSocket connection status: ${status}`);
   });
 
-// 2. Start polling Supabase database table every 30 seconds as a fail-safe fallback
-checkInterval = setInterval(checkStreamConfig, 30000);
-checkStreamConfig();
+// 2. Initial Boot Sequence
+async function init() {
+  console.log('Booting autonomous streamer. Syncing database state to LIVE...');
+  try {
+    await supabase
+      .from('stream_config')
+      .update({ status: 'streaming', updated_at: new Date().toISOString() })
+      .eq('id', 1);
+  } catch (e) {
+    console.error('Failed to sync initial DB state:', e);
+  }
+
+  // Start polling Supabase database table every 30 seconds as a fail-safe fallback
+  checkInterval = setInterval(checkStreamConfig, 30000);
+  checkStreamConfig();
+}
+
+init();
 
 // 3. Autonomous Shutdown Sequence (Exits cleanly after 5.5 hours to prevent exceeding limits)
 const SHUTDOWN_TIMEOUT_MS = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes
